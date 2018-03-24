@@ -1,0 +1,2 @@
+className = com.example.java_reflex.Test
+methodName = Testshow1

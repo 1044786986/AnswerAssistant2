@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <de.hdodenhof.circleimageview.CircleImageView
+        android:id="@+id/tv1"
+        android:src="@mipmap/ic_launcher"
+        android:layout_gravity="center"
+        android:layout_width="30dp"
+        android:layout_height="30dp" />
+
+    <de.hdodenhof.circleimageview.CircleImageView
+        android:id="@+id/tv2"
+        android:src="@mipmap/ic_launcher_round"
+        android:layout_gravity="center"
+        android:layout_width="30dp"
+        android:layout_height="30dp" />
+
+    <de.hdodenhof.circleimageview.CircleImageView
+        android:id="@+id/tv3"
+        android:src="@mipmap/ic_launcher_round"
+        android:layout_gravity="center"
+        android:layout_width="30dp"
+        android:layout_height="30dp" />
+
+    <de.hdodenhof.circleimageview.CircleImageView
+        android:id="@+id/tv4"
+        android:src="@mipmap/ic_launcher_round"
+        android:layout_gravity="center"
+        android:layout_width="30dp"
+        android:layout_height="30dp" />
+
+    <de.hdodenhof.circleimageview.CircleImageView
+        android:id="@+id/tv5"
+        android:src="@mipmap/ic_launcher_round"
+        android:layout_gravity="center"
+        android:layout_width="30dp"
+        android:layout_height="30dp" />
+
+    <ImageView
+        android:id="@+id/imageView"
+        android:src="@mipmap/ic_launcher_round"
+        android:layout_gravity="center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+</FrameLayout>

@@ -13,7 +13,6 @@ import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.View;
 
 
@@ -104,13 +103,6 @@ public class LogoView extends View{
         canvas.drawCircle(r,r,r,mCirclePaint);
     }
 
-    protected void translation(){
-        mAnimatorSet = new AnimatorSet();
-        mAnimatorSet.playTogether(ObjectAnimator.ofFloat(this,"translationX",0,360));
-        mAnimatorSet.setDuration(mRotation_time);
-        mAnimatorSet.start();
-    }
-
     /**
      * 初始化旋转动画
      */
@@ -140,11 +132,6 @@ public class LogoView extends View{
      */
     protected void drawCloseLogo(){
         mHandler.sendEmptyMessage(CLOSE_LOGO);
-    }
-
-    protected void drawHideLogo(){
-        Log.i("aaa","drawHideLogo");
-        mHandler.sendEmptyMessage(HIDE_LOGO);
     }
 
     /**

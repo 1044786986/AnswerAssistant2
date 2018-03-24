@@ -3,6 +3,7 @@ package com.example.ljh.answerassistant.FloatMenu;
 import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -10,14 +11,13 @@ import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.CountDownTimer;
-import android.os.Handler;
-import android.os.Message;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.animation.Interpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 
 import com.example.ljh.answerassistant.manager.ThreadPoolManager;
@@ -78,12 +78,10 @@ public class FloatMenu {
 
     private final int LOGO_ROTATE_ANGLE = 720;//悬浮球翻转的角度
     private final int LOGO_ROTATE_TIME = 300; //悬浮球翻转的速度
+    private final int LOGO_RECOVER_TIME = 400;//悬浮球恢复的速度
     private final int OPEN_MENU_TIME = 200;  //开关子菜单的速度
 
-    /**
-     * 恢复悬浮球移动时，子线程睡眠的时间
-     */
-    private int mRecoverSleepTime = 1;
+    private int mValue;//恢复悬浮球移动时的value
     private int mOffset;          //子菜单与悬浮窗的坐标偏移量
 
     public static int mScreenHeight = 0;       //屏幕高度
@@ -97,7 +95,6 @@ public class FloatMenu {
     private boolean openingTimer = false;//定时器是否正在开启
     private boolean isTimer = false;     //是否需要计时器
     private boolean isHiding = false;    //悬浮球是否在隐藏
-    private boolean isRecoving = false;  //是否正在恢复悬浮球
     private boolean isPermission = false;//是否需要悬浮窗权限
 
     private List<FloatMenuItem> mChildMenuItemList = new ArrayList<>();          //记录子菜单item
@@ -115,14 +112,15 @@ public class FloatMenu {
     private SharedPreferences.Editor mEditor;
     private AnimatorSet mAnimatorSet;
     private AnimatorSet mRecoverAnimatorSet;
+    private ValueAnimator mTranslationAnimator;    //移动动画
+    private ObjectAnimator mRotationAnimator;       //翻转动画
+    private Interpolator mInterpolator = new LinearInterpolator();
 
-//    private Handler mHandler = new Handler(Looper.getMainLooper());
     private ThreadPoolManager mRotationChildThread = ThreadPoolManager.getThreadPoolManager();
 
     private CountDownTimer mTimer;  //定时器，定时隐藏悬浮球
     private Bitmap mLogo;           //悬浮球Logo
     private Bitmap mOpenLogo;       //悬浮球打开后的logo
-
     public LogoView mLogoView;     //菜单View
 
     private OnMenuClickListener mOnMenuClickListener;
@@ -136,7 +134,6 @@ public class FloatMenu {
         public boolean onTouch(View v, MotionEvent event) {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
-                    Log.i("aaa","133Down()");
                     mInLogoX = event.getX();
                     mInLogoY = event.getY();
                     //当悬浮球处于隐藏状态，激活悬浮球
@@ -148,17 +145,12 @@ public class FloatMenu {
                         isRotating = true;
                         rotationFloatMenu();
                     }
-                    //正在恢复悬浮球位置时，取消恢复位置
-                    if(isRecoving){
-                        isRecoving = false;
-                    }
+
                     //取消定时器
                     if(isTimer && openingTimer){
-                        Log.i("aaa","148取消定时器");
                         mTimer.cancel();
                         openingTimer = false;
                     }
-//                    mLogoView.translation();
                     break;
                 case MotionEvent.ACTION_MOVE:
                     //移动悬浮球
@@ -166,20 +158,11 @@ public class FloatMenu {
                         isMoving = true;
                         moveFloatMenu(event.getRawX() - mInLogoX, event.getRawY() - mInLogoY);
                     }
-                    /**
-                     * 恢复悬浮球翻转动画完成后再设置监听，down方法没反应，在move方法再判断一次
-                     * 旋转悬浮球
-                     */
-//                    if(isRotate && isRotating == false){
-//                        isRotating = true;
-//                        rotationFloatMenu();
-//                    }
-                    //取消定时器
-//                    if(isTimer && openingTimer){
-//                        Log.i("aaa","148取消定时器");
-//                        mTimer.cancel();
-//                        openingTimer = false;
-//                    }
+                    //旋转悬浮球
+                    if(isRotate && !isRotating) {
+                        isRotating = true;
+                        rotationFloatMenu();
+                    }
                     break;
                 case MotionEvent.ACTION_UP:
                     /**
@@ -199,18 +182,10 @@ public class FloatMenu {
                     /**
                      * 打开或关闭菜单
                      */
-                    if (!isOpen  && !isMoving) {
+                    if (!isOpen  && !isMoving && !openingTimer) {
                         openFloatMenu(getFloatMenuLocation());
                     } else if (isOpen) {
                         closeFloatMenu();
-                    }
-                    /**
-                     * 打开计时器
-                     */
-                    //允许开启定时器&&没有开启定时器
-                    if(isTimer && !openingTimer && mTimer != null && !isOpen){
-                        openingTimer = true;
-                        mTimer.start();
                     }
                     break;
             }
@@ -231,34 +206,6 @@ public class FloatMenu {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-            }
-        }
-    };
-    /**
-     * 恢复悬浮球动画
-     */
-    private Runnable mRecoverRunnable = new Runnable() {
-        @Override
-        public void run() {
-            mWindowManager.updateViewLayout(mLogoView, mLayoutParams);
-        }
-    };
-
-    private Handler mHandler = new Handler(){
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            switch (msg.what){
-                case LEFT:
-                    mWindowManager.updateViewLayout(mLogoView,mLayoutParams);
-                    if(mLogoX > 0){
-                        mLogoX--;
-                        mLayoutParams.x = mLogoX;
-                        mHandler.sendEmptyMessageDelayed(LEFT,1);
-                    }
-                    break;
-                case RIGHT:
-                    break;
             }
         }
     };
@@ -381,7 +328,6 @@ public class FloatMenu {
         }
 
         int x,y;
-//        AnimatorSet animatorSet = new AnimatorSet();
         mAnimatorSet = new AnimatorSet();
         CircleImageView circleImageView = null;
         for (int i = 0;i < mChildMenuList.size();i++){
@@ -403,8 +349,11 @@ public class FloatMenu {
 
             @Override
             public void onAnimationEnd(Animator animation) {
-                setFloatMenuListener();     //设置悬浮球监听
                 removeChildMenuLayout();    //移除子菜单
+                setFloatMenuListener();     //设置悬浮球监听
+                if(isTimer && !openingTimer){
+                    mTimer.start();
+                }
             }
 
             @Override
@@ -500,32 +449,22 @@ public class FloatMenu {
      * 移动悬浮球
      */
     private void moveFloatMenu(float x, float y) {
-        if(y <= mStatusBarHeight + mLogoView.r){
+        if (y <= mStatusBarHeight + mLogoView.r) {
             y = mStatusBarHeight + mLogoView.r;
         }
-//        if(Math.abs(x - mLogoX) > mLogoView.r/2 || Math.abs(y - mLogoY) > mLogoView.r/2){
-//            isMoving = true;
-////            if(x < R){
-////                x = mLogoView.r;
-////            }else if(x > mScreenWidth - R){
-////                x = mScreenWidth - mLogoView.r;
-////            }
-////
-////            mLogoX = (int)x - mLogoView.r;
-////            mLogoY = (int)y - mLogoView.r;
-////
-////            if(mLogoX < 0){
-////                mLogoX = 0;
-////            }
-////            if(mLogoX > mScreenWidth){
-////                mLogoX = mScreenWidth;
-////            }
-            mLogoX = (int)x;
-            mLogoY = (int)y;
-            mLayoutParams.x = mLogoX;
-            mLayoutParams.y = mLogoY;
-            mWindowManager.updateViewLayout(mLogoView, mLayoutParams);
-//        }
+        mLogoX = (int) x;
+        mLogoY = (int) y;
+
+        if(mLogoX < 0){
+            mLogoX = 0;
+        }
+        if(mLogoX >= mScreenWidth - R){
+            mLogoX = mScreenWidth;
+        }
+
+        mLayoutParams.x = mLogoX;
+        mLayoutParams.y = mLogoY;
+        mWindowManager.updateViewLayout(mLogoView, mLayoutParams);
     }
 
     /**
@@ -574,77 +513,67 @@ public class FloatMenu {
      */
     private void recoverFloatMenu() {
         final int location = getRecoverLogoLocation();
-        final int distance = mLogoX;    //悬浮球到两边的距离
-        isRecoving = true;
-        mRecoverAnimatorSet.start();    //恢复悬浮球时的旋转动画
-        ThreadPoolManager.getThreadPoolManager().execute(new Runnable() {
+        if(location == LEFT){
+            mTranslationAnimator = ValueAnimator.ofInt(mLogoX,0);
+        }else {
+            mTranslationAnimator = ValueAnimator.ofInt(mLogoX,mScreenWidth);
+        }
+        mTranslationAnimator.setDuration(LOGO_RECOVER_TIME);
+        mTranslationAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
-            public void run() {
-                if(location == LEFT){    //判断悬浮球在左半部分还是右半部分，选择调用的方法
-//                    mHandler.sendEmptyMessage(LEFT);
-                    recoverFloatMenuLeft(distance);
-                }else{
-//                    recoverFloatMenuRight(distance);
-                }
+            public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                mValue = (int) valueAnimator.getAnimatedValue();
+                updateLogo(mValue);
             }
         });
-    }
+        mTranslationAnimator.addListener(new Animator.AnimatorListener() {
+            @Override
+            public void onAnimationStart(Animator animator) {
 
-    /**
-     * 悬浮球在左半区恢复的方法
-     * @param count
-     */
-    private void recoverFloatMenuLeft(int count){
-        while(mLogoX > 0){
-            mLogoX--;
-            mLayoutParams.x = mLogoX;
-            mHandler.post(mRecoverRunnable);
-            if (mLogoX % 2 == 0) {
-                try {
-                    Thread.sleep(1,1);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animator) {
+                isMoving = false;
+                if(isTimer && !isOpen){
+                    mTimer.start();
                 }
-            }
-            //终止恢复悬浮球
-            if(!isRecoving){
-                break;
-            }
-            //保存悬浮球位置
-            if(mLogoX == 0){
-                Log.i("aaa","574恢复完成");
-                isMoving = false;
                 saveLogoLocation();
             }
-//            Log.i("aaa","577mLogoX = " + mLogoX);
+
+            @Override
+            public void onAnimationCancel(Animator animator) {
+
+            }
+
+            @Override
+            public void onAnimationRepeat(Animator animator) {
+
+            }
+        });
+        /**
+         * 是否有开启翻转动画
+         */
+        if(isRotate){
+            mRecoverAnimatorSet = new AnimatorSet();
+            mRecoverAnimatorSet.setInterpolator(mInterpolator);
+            mRecoverAnimatorSet.playTogether(mTranslationAnimator,mRotationAnimator);
+            mRecoverAnimatorSet.start();
+        }else{
+            mTranslationAnimator.setInterpolator(mInterpolator);
+            mTranslationAnimator.start();
         }
     }
 
     /**
-     * 悬浮球在右半区恢复的方法
-     * @param count
+     * 更新悬浮球位置
      */
-    private void recoverFloatMenuRight(int count){
-        for (int i=count+1;i<=mScreenWidth;i++){
-            mLayoutParams.x = mLogoX;
-            mLogoX = i;
-            mHandler.post(mRecoverRunnable);
-            try {
-                Thread.sleep(mRecoverSleepTime);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            //终止恢复悬浮球
-            if(!isRecoving){
-                break;
-            }
-            //保存悬浮球位置
-            if(i == mScreenWidth){
-                isMoving = false;
-                saveLogoLocation();
-            }
-        }
+    private void updateLogo(int value){
+        mLogoX = value;
+        mLayoutParams.x = mLogoX;
+        mWindowManager.updateViewLayout(mLogoView,mLayoutParams);
     }
+
 
     /**
      * 判断悬浮球在左半区还是右半区
@@ -747,7 +676,7 @@ public class FloatMenu {
          */
         if(!(mContext instanceof Activity)){
             if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT){
-                if(Build.VERSION.SDK_INT > 23){
+                if(Build.VERSION.SDK_INT > 23){ //
                     mLayoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
                 }else{
                     mLayoutParams.type = WindowManager.LayoutParams.TYPE_TOAST;
@@ -759,8 +688,6 @@ public class FloatMenu {
             }
         }
 
-//        mLayoutParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
-//                | WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY;
         mLayoutParams.format = PixelFormat.TRANSLUCENT;
         mLayoutParams.gravity = Gravity.LEFT | Gravity.TOP;
         mLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -794,7 +721,7 @@ public class FloatMenu {
             initTimer();
         }
         //初始化恢复悬浮球动画
-        initRecoverFloatMenuAnimator();
+        initRecoverRotationAnimator();
     }
 
     /**
@@ -857,7 +784,6 @@ public class FloatMenu {
             }
             @Override
             public void onFinish() {
-                Log.i("aaa","817倒计时完成");
                 hideLogo();
                 if(!openingTimer){
                     mTimer.cancel();
@@ -870,32 +796,11 @@ public class FloatMenu {
     }
 
     /**
-     * 初始化恢复悬浮球动画
+     * 初始化恢复悬浮球翻转动画
      */
-    private void initRecoverFloatMenuAnimator() {
-        mRecoverAnimatorSet = new AnimatorSet();
-        mRecoverAnimatorSet.playTogether(ObjectAnimator.ofFloat(mLogoView, "rotationX", 0, LOGO_ROTATE_ANGLE));
-        mRecoverAnimatorSet.setDuration(LOGO_ROTATE_TIME);
-        mRecoverAnimatorSet.addListener(new Animator.AnimatorListener() {
-            @Override
-            public void onAnimationStart(Animator animation) {
-//                dismissFloatMenuListener();
-            }
-
-            @Override
-            public void onAnimationEnd(Animator animation) {
-//                setFloatMenuListener();
-//                isMoving = false;
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-            }
-
-            @Override
-            public void onAnimationRepeat(Animator animation) {
-            }
-        });
+    private void initRecoverRotationAnimator() {
+        mRotationAnimator = ObjectAnimator.ofFloat(mLogoView,"rotationX",0,LOGO_ROTATE_ANGLE);
+        mRotationAnimator.setDuration(LOGO_ROTATE_TIME);
     }
 
     /**

@@ -4,8 +4,10 @@ import android.app.Service;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.support.annotation.Nullable;
+import android.support.annotation.RequiresApi;
 import android.util.Log;
 
 /**
@@ -34,9 +36,11 @@ public class FloatLogoMenuService extends Service {
         Log.i("aaa","----------unbindService()");
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.i("aaa","----------onStartCommand()");
+        startForegroundService(intent);
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -49,6 +53,7 @@ public class FloatLogoMenuService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        stopForeground(true);
         Log.i("aaa","----------onDestroy()");
     }
 
